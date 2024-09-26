@@ -67,6 +67,7 @@ class Execution:
     evMultiplier: float = 0.0
     modelCode: str = ''
     lastLiquidity: int = 0
+    pendingPriceRevision: bool = False
 
 
 @dataclass
@@ -493,7 +494,7 @@ class DynamicObject:
 class FundamentalRatios(DynamicObject):
     """
     See:
-    https://interactivebrokers.github.io/tws-api/fundamental_ratios_tags.html
+    https://web.archive.org/web/20200725010343/https://interactivebrokers.github.io/tws-api/fundamental_ratios_tags.html
     """
 
     pass

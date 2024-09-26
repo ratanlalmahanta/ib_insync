@@ -1,4 +1,15 @@
-|Build| |Group| |PyVersion| |Status| |PyPiVersion| |CondaVersion| |License| |Downloads| |Docs|
+|Build| |Group| |PyVersion| |Status| |PyPiVersion| |License| |Downloads| |Docs|
+
+Notice
+============
+
+::
+
+  Unfortunately, our dear brother Ewald de Wit passed away monday, March eleven as a result of a serious illness last year.
+  Although we were not involved in his activities on this platform, we felt the due to inform you. 
+  We thank you for knowing him.
+
+  Maritza and Philippe de Wit
 
 Introduction
 ============
@@ -35,7 +46,7 @@ Installation
 Requirements:
 
 * Python 3.6 or higher;
-* A running TWS or IB Gateway application (version 972 or higher).
+* A running TWS or IB Gateway application (version 1023 or higher).
   Make sure the
   `API port is enabled <https://interactivebrokers.github.io/tws-api/initial_setup.html>`_
   and 'Download open orders on connection' is checked.
@@ -60,7 +71,7 @@ This is a complete script to download historical data:
         contract, endDateTime='', durationStr='30 D',
         barSizeSetting='1 hour', whatToShow='MIDPOINT', useRTH=True)
 
-    # convert to pandas dataframe:
+    # convert to pandas dataframe (pandas needs to be installed):
     df = util.df(bars)
     print(df)
 
@@ -127,7 +138,7 @@ Good luck and enjoy,
    :alt: Documentation
    :target: https://ib-insync.readthedocs.io/api.html
 
-.. |Downloads| image:: https://pepy.tech/badge/ib-insync
+.. |Downloads| image:: https://static.pepy.tech/badge/ib-insync
    :alt: Number of downloads
    :target: https://pepy.tech/project/ib-insync
 

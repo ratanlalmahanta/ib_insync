@@ -44,6 +44,7 @@ class Contract:
             * 'NEWS' = News
             * 'FUND' = Mutual fund
             * 'CRYPTO' = Crypto currency
+            * 'EVENT' = Bet on an event
         lastTradeDateOrContractMonth (str): The contract's last trading
             day or contract month (for Options and Futures).
             Strings with format YYYYMM will be interpreted as the
@@ -52,7 +53,7 @@ class Contract:
         strike (float): The option's strike price.
         right (str): Put or Call.
             Valid values are 'P', 'PUT', 'C', 'CALL', or '' for non-options.
-        multiplier (str): he instrument's multiplier (i.e. options, futures).
+        multiplier (str): The instrument's multiplier (i.e. options, futures).
         exchange (str): The destination exchange.
         currency (str): The underlying's currency.
         localSymbol (str): The contract's symbol within its primary exchange.
@@ -126,7 +127,8 @@ class Contract:
             'IOPT': Warrant,
             'BAG': Bag,
             'CRYPTO': Crypto,
-            'NEWS': Contract
+            'NEWS': Contract,
+            'EVENT': Contract,
         }.get(secType, Contract)
         if cls is not Contract:
             kwargs.pop('secType', '')

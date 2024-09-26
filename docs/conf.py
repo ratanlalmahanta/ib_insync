@@ -11,7 +11,7 @@ templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
 project = 'ib_insync'
-copyright = '2022, Ewald de Wit'
+copyright = '2023, Ewald de Wit'
 author = 'Ewald de Wit'
 
 __version__ = ''
@@ -46,8 +46,8 @@ intersphinx_mapping = {
 github_url = 'https://github.com/erdewit/ib_insync'
 
 extlinks = {
-    'issue': ('https://github.com/erdewit/ib_insync/issues/%s', 'issue '),
-    'pull': ('https://github.com/erdewit/ib_insync/pull/%s', 'pull '),
+    'issue': ('https://github.com/erdewit/ib_insync/issues/%s', 'issue %s'),
+    'pull': ('https://github.com/erdewit/ib_insync/pull/%s', 'pull %s'),
 }
 
 autoclass_content = 'both'

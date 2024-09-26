@@ -85,7 +85,7 @@ class Client:
     RequestsInterval = 1
 
     MinClientVersion = 157
-    MaxClientVersion = 176
+    MaxClientVersion = 178
 
     (DISCONNECTED, CONNECTING, CONNECTED) = range(3)
 
@@ -232,13 +232,13 @@ class Client:
         self.conn.disconnect()
         self.reset()
 
-    def send(self, *fields):
+    def send(self, *fields, makeEmpty=True):
         """Serialize and send the given fields using the IB socket protocol."""
         if not self.isConnected():
             raise ConnectionError('Not connected')
 
         msg = io.StringIO()
-        empty = (None, UNSET_INTEGER, UNSET_DOUBLE)
+        empty = (None, UNSET_INTEGER, UNSET_DOUBLE) if makeEmpty else (None,)
         for field in fields:
             typ = type(field)
             if field in empty:
@@ -465,8 +465,10 @@ class Client:
             order.goodTillDate,
             order.faGroup,
             order.faMethod,
-            order.faPercentage,
-            order.faProfile,
+            order.faPercentage]
+        if version < 177:
+            fields += [order.faProfile]
+        fields += [
             order.modelCode,
             order.shortSaleSlot,
             order.designatedLocation,
@@ -558,7 +560,7 @@ class Client:
             order.randomizeSize,
             order.randomizePrice]
 
-        if order.orderType == 'PEG BENCH':
+        if order.orderType in ('PEG BENCH', 'PEGBENCH'):
             fields += [
                 order.referenceContractId,
                 order.isPeggedChangeAmountDecrease,
@@ -608,13 +610,13 @@ class Client:
         if version >= 170:
             if contract.exchange == 'IBKRATS':
                 fields += [order.minTradeQty]
-            if order.orderType == 'PEG BEST':
+            if order.orderType in ('PEG BEST', 'PEGBEST'):
                 fields += [
                     order.minCompeteSize,
                     order.competeAgainstBestOffset]
                 if order.competeAgainstBestOffset == math.inf:
                     fields += [order.midOffsetAtWhole, order.midOffsetAtHalf]
-            elif order.orderType == 'PEG MID':
+            elif order.orderType in ('PEG MID', 'PEGMID'):
                 fields += [order.midOffsetAtWhole, order.midOffsetAtHalf]
 
         self.send(*fields)
@@ -987,7 +989,7 @@ class Client:
                 data.startDate,
                 data.endDate,
                 data.totalLimit]
-        self.send(*fields)
+        self.send(*fields, makeEmpty=False)
 
     def cancelWshEventData(self, reqId):
         self.send(103, reqId)

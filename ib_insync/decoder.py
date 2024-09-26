@@ -329,6 +329,8 @@ class Decoder:
             c.lastTradeDateOrContractMonth = times[0]
         if len(times) > 1:
             cd.lastTradeTime = times[1]
+        if len(times) > 2:
+            cd.timeZoneId = times[2]
 
         cd.longName = cd.longName.encode().decode('unicode-escape')
         self.parse(cd)
@@ -440,7 +442,10 @@ class Decoder:
             ex.evRule,
             ex.evMultiplier,
             ex.modelCode,
-            ex.lastLiquidity) = fields
+            ex.lastLiquidity,
+            *fields) = fields
+        if self.serverVersion >= 178:
+            ex.pendingPriceRevision, *fields = fields
 
         self.parse(c)
         self.parse(ex)
@@ -854,7 +859,10 @@ class Decoder:
             o.faGroup,
             o.faMethod,
             o.faPercentage,
-            o.faProfile,
+            *fields) = fields
+        if self.serverVersion < 177:
+            o.faProfile, *fields = fields
+        (
             o.modelCode,
             o.goodTillDate,
             o.rule80A,
@@ -1007,7 +1015,7 @@ class Decoder:
             o.randomizePrice,
             *fields) = fields
 
-        if o.orderType == 'PEG BENCH':
+        if o.orderType in ('PEG BENCH', 'PEGBENCH'):
             (
                 o.referenceContractId,
                 o.isPeggedChangeAmountDecrease,
@@ -1107,7 +1115,10 @@ class Decoder:
             o.faGroup,
             o.faMethod,
             o.faPercentage,
-            o.faProfile,
+            *fields) = fields
+        if self.serverVersion < 177:
+            o.faProfile, *fields = fields
+        (
             o.modelCode,
             o.goodTillDate,
             o.rule80A,
@@ -1230,7 +1241,7 @@ class Decoder:
             o.randomizePrice,
             *fields) = fields
 
-        if o.orderType == 'PEG BENCH':
+        if o.orderType in ('PEG BENCH', 'PEGBENCH'):
             (
                 o.referenceContractId,
                 o.isPeggedChangeAmountDecrease,

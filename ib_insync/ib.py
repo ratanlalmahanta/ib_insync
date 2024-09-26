@@ -18,7 +18,7 @@ from ib_insync.objects import (
     NewsArticle, NewsBulletin, NewsProvider, NewsTick, OptionChain,
     OptionComputation, PnL, PnLSingle, PortfolioItem, Position, PriceIncrement,
     RealTimeBarList, ScanDataList, ScannerSubscription, SmartComponent,
-    TagValue, TradeLogEntry)
+    TagValue, TradeLogEntry, WshEventData)
 from ib_insync.order import (
     BracketOrder, LimitOrder, Order, OrderState, OrderStatus, StopOrder, Trade)
 from ib_insync.ticker import Ticker
@@ -164,6 +164,13 @@ class IB:
         * ``scannerDataEvent`` (data: :class:`.ScanDataList`):
           Emit data from a scanner subscription.
 
+        * ``wshMetaEvent`` (dataJson: str):
+          Emit WSH metadata.
+
+        * ``wshEvent`` (dataJson: str):
+          Emit WSH event data (such as earnings dates, dividend dates,
+          options expiration dates, splits, spinoffs and conferences).
+
         * ``errorEvent`` (reqId: int, errorCode: int, errorString: str,
           contract: :class:`.Contract`):
           Emits the reqId/orderId and TWS error code and string (see
@@ -189,6 +196,7 @@ class IB:
         'updatePortfolioEvent', 'positionEvent', 'accountValueEvent',
         'accountSummaryEvent', 'pnlEvent', 'pnlSingleEvent',
         'scannerDataEvent', 'tickNewsEvent', 'newsBulletinEvent',
+        'wshMetaEvent', 'wshEvent',
         'errorEvent', 'timeoutEvent')
 
     RequestTimeout: float = 0
@@ -226,6 +234,8 @@ class IB:
         self.scannerDataEvent = Event('scannerDataEvent')
         self.tickNewsEvent = Event('tickNewsEvent')
         self.newsBulletinEvent = Event('newsBulletinEvent')
+        self.wshMetaEvent = Event('wshMetaEvent')
+        self.wshEvent = Event('wshEvent')
         self.errorEvent = Event('errorEvent')
         self.timeoutEvent = Event('timeoutEvent')
 
@@ -246,7 +256,8 @@ class IB:
 
     def connect(
             self, host: str = '127.0.0.1', port: int = 7497, clientId: int = 1,
-            timeout: float = 4, readonly: bool = False, account: str = ''):
+            timeout: float = 4, readonly: bool = False, account: str = '',
+            raiseSyncErrors: bool = False):
         """
         Connect to a running TWS or IB gateway application.
         After the connection is made the client is fully synchronized
@@ -265,9 +276,13 @@ class IB:
               is raised. Set to 0 to disable timeout.
             readonly: Set to ``True`` when API is in read-only mode.
             account: Main account to receive updates for.
+            raiseSyncErrors: When ``True`` this will cause an initial
+              sync request error to raise a `ConnectionError``.
+              When ``False`` the error will only be logged at error level.
         """
         return self._run(self.connectAsync(
-            host, port, clientId, timeout, readonly, account))
+            host, port, clientId, timeout, readonly, account,
+            raiseSyncErrors))
 
     def disconnect(self):
         """
@@ -662,8 +677,7 @@ class IB:
             orderStatus = OrderStatus(
                 orderId=orderId, status=OrderStatus.PendingSubmit)
             logEntry = TradeLogEntry(now, orderStatus.status)
-            trade = Trade(
-                contract, order, orderStatus, [], [logEntry])
+            trade = Trade(contract, order, orderStatus, [], [logEntry])
             self.wrapper.trades[key] = trade
             self._logger.info(f'placeOrder: New order {trade}')
             self.newOrderEvent.emit(trade)
@@ -1319,6 +1333,8 @@ class IB:
         """
         reqId = self.client.getReqId()
         ticker = self.wrapper.startTicker(reqId, contract, 'mktDepth')
+        ticker.domBids.clear()
+        ticker.domAsks.clear()
         self.client.reqMktDepth(
             reqId, contract, numRows, isSmartDepth, mktDepthOptions)
         return ticker
@@ -1335,8 +1351,6 @@ class IB:
         reqId = self.wrapper.endTicker(ticker, 'mktDepth') if ticker else 0
         if ticker and reqId:
             self.client.cancelMktDepth(reqId, isSmartDepth)
-            ticker.domBids.clear()
-            ticker.domAsks.clear()
         else:
             self._logger.error(
                 f'cancelMktDepth: No reqId found for contract {contract}')
@@ -1656,6 +1670,103 @@ class IB:
         reqId = self.client.getReqId()
         self.client.replaceFA(reqId, faDataType, xml)
 
+    def reqWshMetaData(self):
+        """
+        Request Wall Street Horizon metadata.
+
+        https://interactivebrokers.github.io/tws-api/fundamentals.html
+        """
+        if self.wrapper.wshMetaReqId:
+            self._logger.warning('reqWshMetaData already active')
+        else:
+            reqId = self.client.getReqId()
+            self.wrapper.wshMetaReqId = reqId
+            self.client.reqWshMetaData(reqId)
+
+    def cancelWshMetaData(self):
+        """Cancel WSH metadata."""
+        reqId = self.wrapper.wshMetaReqId
+        if not reqId:
+            self._logger.warning('reqWshMetaData not active')
+        else:
+            self.client.cancelWshMetaData(reqId)
+            self.wrapper.wshMetaReqId = 0
+
+    def reqWshEventData(self, data: WshEventData):
+        """
+        Request Wall Street Horizon event data.
+
+        :meth:`.reqWshMetaData` must have been called first before using this
+        method.
+
+        Args:
+            data: Filters for selecting the corporate event data.
+
+        https://interactivebrokers.github.io/tws-api/wshe_filters.html
+        """
+        if self.wrapper.wshEventReqId:
+            self._logger.warning('reqWshEventData already active')
+        else:
+            reqId = self.client.getReqId()
+            self.wrapper.wshEventReqId = reqId
+            self.client.reqWshEventData(reqId, data)
+
+    def cancelWshEventData(self):
+        """Cancel active WHS event data."""
+        reqId = self.wrapper.wshEventReqId
+        if not reqId:
+            self._logger.warning('reqWshEventData not active')
+        else:
+            self.client.cancelWshEventData(reqId)
+            self.wrapper.wshEventReqId = 0
+
+    def getWshMetaData(self) -> str:
+        """
+        Blocking convenience method that returns the WSH metadata (that is
+        the available filters and event types) as a JSON string.
+
+        Please note that a `Wall Street Horizon subscription
+        <https://www.wallstreethorizon.com/interactive-brokers>`_
+        is required.
+
+        .. code-block:: python
+
+            # Get the list of available filters and event types:
+            meta = ib.getWshMetaData()
+            print(meta)
+        """
+        return self._run(self.getWshMetaDataAsync())
+
+    def getWshEventData(self, data: WshEventData) -> str:
+        """
+        Blocking convenience method that returns the WSH event data as
+        a JSON string.
+        :meth:`.getWshMetaData` must have been called first before using this
+        method.
+
+        Please note that a  `Wall Street Horizon subscription
+        <https://www.wallstreethorizon.com/interactive-brokers>`_
+        is required.
+
+        .. code-block:: python
+
+            # For IBM (with conId=8314) query the:
+            #   - Earnings Dates (wshe_ed)
+            #   - Board of Directors meetings (wshe_bod)
+            data = WshEventData(
+                filter = '''{
+                  "country": "All",
+                  "watchlist": ["8314"],
+                  "limit_region": 10,
+                  "limit": 10,
+                  "wshe_ed": "true",
+                  "wshe_bod": "true"
+                }''')
+            events = ib.getWshEventData(data)
+            print(events)
+        """
+        return self._run(self.getWshEventDataAsync(data))
+
     def reqUserInfo(self) -> str:
         """Get the White Branding ID of the user."""
         return self._run(self.reqUserInfoAsync())
@@ -1665,7 +1776,8 @@ class IB:
     async def connectAsync(
             self, host: str = '127.0.0.1', port: int = 7497,
             clientId: int = 1, timeout: Optional[float] = 4,
-            readonly: bool = False, account: str = ''):
+            readonly: bool = False, account: str = '',
+            raiseSyncErrors: bool = False):
         clientId = int(clientId)
         self.wrapper.clientId = clientId
         timeout = timeout or None
@@ -1699,13 +1811,24 @@ class IB:
             tasks = [
                 asyncio.wait_for(req, timeout)
                 for req in reqs.values()]
+            errors = []
             resps = await asyncio.gather(*tasks, return_exceptions=True)
             for name, resp in zip(reqs, resps):
                 if isinstance(resp, asyncio.TimeoutError):
-                    self._logger.error(f'{name} request timed out')
+                    msg = f'{name} request timed out'
+                    errors.append(msg)
+                    self._logger.error(msg)
 
             # the request for executions must come after all orders are in
-            await asyncio.wait_for(self.reqExecutionsAsync(), timeout)
+            try:
+                await asyncio.wait_for(self.reqExecutionsAsync(), timeout)
+            except asyncio.TimeoutError:
+                msg = 'executions request timed out'
+                errors.append(msg)
+                self._logger.error(msg)
+
+            if raiseSyncErrors and len(errors) > 0:
+                raise ConnectionError(errors)
 
             # final check if socket is still ready
             if not self.client.isReady():
@@ -1734,11 +1857,7 @@ class IB:
                     f'possibles are {possibles}')
             else:
                 c = detailsList[0].contract
-                expiry = c.lastTradeDateOrContractMonth
-                if expiry:
-                    # remove time and timezone part as it will cause problems
-                    expiry = expiry.split()[0]
-                    c.lastTradeDateOrContractMonth = expiry
+                assert c
                 if contract.exchange == 'SMART':
                     # overwriting 'SMART' exchange can create invalid contract
                     c.exchange = contract.exchange
@@ -1809,8 +1928,8 @@ class IB:
         tags = (
             'AccountType,NetLiquidation,TotalCashValue,SettledCash,'
             'AccruedCash,BuyingPower,EquityWithLoanValue,'
-            'PreviousEquityWithLoanValue,GrossPositionValue,ReqTEquity,'
-            'ReqTMargin,SMA,InitMarginReq,MaintMarginReq,AvailableFunds,'
+            'PreviousDayEquityWithLoanValue,GrossPositionValue,RegTEquity,'
+            'RegTMargin,SMA,InitMarginReq,MaintMarginReq,AvailableFunds,'
             'ExcessLiquidity,Cushion,FullInitMarginReq,FullMaintMarginReq,'
             'FullAvailableFunds,FullExcessLiquidity,LookAheadNextChange,'
             'LookAheadInitMarginReq,LookAheadMaintMarginReq,'
@@ -2094,6 +2213,25 @@ class IB:
             return future.result()
         except asyncio.TimeoutError:
             self._logger.error('requestFAAsync: Timeout')
+
+    async def getWshMetaDataAsync(self) -> str:
+        if self.wrapper.wshMetaReqId:
+            self.cancelWshMetaData()
+        self.reqWshMetaData()
+        future = self.wrapper.startReq(
+            self.wrapper.wshMetaReqId, container='')
+        await future
+        return future.result()
+
+    async def getWshEventDataAsync(self, data: WshEventData) -> str:
+        if self.wrapper.wshEventReqId:
+            self.cancelWshEventData()
+        self.reqWshEventData(data)
+        future = self.wrapper.startReq(
+            self.wrapper.wshEventReqId, container='')
+        await future
+        self.cancelWshEventData()
+        return future.result()
 
     def reqUserInfoAsync(self):
         reqId = self.client.getReqId()
